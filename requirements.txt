@@ -1,5 +1,10 @@
+# requirements.txt
+#
+# Библиотеки, необходимые для основного бота (app.py)
 Flask
-gunicorn
-pandas
-invest-python
+requests
+pyTelegramBotAPI
 
+# Библиотеки, необходимые для агента-источника (agent_source.py)
+tinkoff-invest-api
+pandas
