@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 # Импортируем Flask для создания веб-сервиса
 from flask import Flask, jsonify 
-from tinkoff.invest import Client, MoneyValue, PortfolioResponse
+from tinvest import SyncClient
 from tinkoff.invest.exceptions import RequestError
 
 # --- 1. Настройка и Инициализация ---
