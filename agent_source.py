@@ -4,12 +4,12 @@ import os
 import json
 from flask import Flask, jsonify
 import pandas as pd
-# ИСПОЛЬЗУЕМ НОВЫЙ SDK
-from tinkoff.invest import Client, RequestError
+# ИСПОЛЬЗУЕМ НОВЫЙ ИСПРАВЛЕННЫЙ ИМПОРТ
+import tinkoff.invest as ti 
 from tinkoff.invest.constants import ACCOUNT_TYPE_TINKOFF
+from tinkoff.invest.exceptions import RequestError # Корректный импорт исключения
 
 # Получение токена из переменных окружения
-# ПРИМЕЧАНИЕ: новый SDK использует токены НОВОГО ОБРАЗЦА (должны работать и старые, но лучше создать новый ReadOnly)
 TINKOFF_API_TOKEN = os.getenv("TINKOFF_API_TOKEN")
 
 app = Flask(__name__)
@@ -39,9 +39,8 @@ def get_portfolio():
         return {"error": "TINKOFF_API_TOKEN не установлен. Проверьте переменные окружения."}, 500
 
     try:
-        # Инициализация клиента НОВОГО SDK
-        # Client использует контекстный менеджер (with), что является лучшей практикой
-        with Client(TINKOFF_API_TOKEN) as client:
+        # Инициализация клиента НОВОГО SDK (используем ti.Client)
+        with ti.Client(TINKOFF_API_TOKEN) as client:
             
             # 1. Получаем список счетов
             accounts_response = client.users.get_accounts()
@@ -67,14 +66,23 @@ def get_portfolio():
                 def quotation_to_float(quotation):
                     return quotation.units + quotation.nano / 10**9
 
-                current_price = quotation_to_float(position.average_position_price)
+                # Проверяем, что average_position_price не None, прежде чем его использовать
+                price_info = position.average_position_price
+                if price_info:
+                    current_price = quotation_to_float(price_info)
+                    currency = price_info.currency
+                else:
+                    # Если цена недоступна (например, для пустой позиции), ставим 0
+                    current_price = 0.0
+                    currency = "RUB" # Предположим базовую валюту
                 
                 positions.append({
                     "ticker": position.ticker,
                     "figi": position.figi,
                     "name": position.name,
-                    "balance": quotation_to_float(position.quantity), # Баланс теперь в quantity
-                    "currency": position.average_position_price.currency,
+                    # Баланс теперь в quantity
+                    "balance": quotation_to_float(position.quantity), 
+                    "currency": currency,
                     "price": float(current_price),
                 })
             
@@ -89,7 +97,7 @@ def get_portfolio():
         app.logger.error(error_msg)
         return {"error": error_msg}, 500
         
-    # Обработка любых других непредвиденных ошибок (например, если pandas не может обработать данные)
+    # Обработка любых других непредвиденных ошибок
     except Exception as e:
         error_msg = f"Неизвестная ошибка при получении портфеля: {e}"
         app.logger.error(error_msg)
@@ -99,4 +107,3 @@ def get_portfolio():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-    
