@@ -2,5 +2,5 @@
 Flask
 requests
 pyTelegramBotAPI
-tinkoff-invest-api
+tinkoff-invest  <-- ИСПРАВЛЕННАЯ СТРОКА
 pandas
