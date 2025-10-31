@@ -5,7 +5,7 @@ import json
 from flask import Flask, jsonify
 import pandas as pd
 # ИСПОЛЬЗУЕМ НОВЫЙ ИСПРАВЛЕННЫЙ ИМПОРТ
-import tinkoff.invest as ti 
+import tinkoff_invest as ti
 from tinkoff.invest.constants import ACCOUNT_TYPE_TINKOFF
 from tinkoff.invest.exceptions import RequestError # Корректный импорт исключения
 
