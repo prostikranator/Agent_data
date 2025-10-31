@@ -1,7 +1,7 @@
 # main_bot.py (Основной Бот - легкий и независимый)
 
 import os
-import requests
+import requests # Нужен для HTTP-запросов к агенту
 import json
 import logging
 from flask import Flask, request
@@ -16,9 +16,10 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "gpt-3.5-turbo")
 
-# URL нашего нового микросервиса. Предполагаем, что он доступен по сети или локально.
-AGENT_SOURCE_URL = os.getenv("AGENT_SOURCE_URL", "http://127.0.0.1:8000")
+# АДРЕС НАШЕГО НОВОГО МИКРОСЕРВИСА
+AGENT_SOURCE_URL = os.getenv("AGENT_SOURCE_URL", "http://127.0.0.1:8000") 
 
+# Проверка токенов (TINKOFF_API_TOKEN больше не нужен здесь!)
 if not TELEGRAM_TOKEN or not OPENROUTER_API_KEY:
     logger.critical("❌ Не найдены все обязательные токены для Бота.")
     raise ValueError("Не найдены обязательные переменные среды для основного бота.")
@@ -31,7 +32,7 @@ SECRET_ROUTE = f"/{TELEGRAM_TOKEN}"
 # --- 3. ФУНКЦИИ ---
 
 def get_portfolio_from_agent() -> str:
-    """Запрашивает данные портфеля у микросервиса-источника."""
+    """Запрашивает данные портфеля у микросервиса-источника по HTTP."""
     url = f"{AGENT_SOURCE_URL}/api/v1/portfolio"
     try:
         # Делаем HTTP-запрос к нашему независимому агенту
@@ -41,14 +42,15 @@ def get_portfolio_from_agent() -> str:
         return response.json().get("report", "⚠️ Ошибка: Агент не вернул отчет.")
     except requests.exceptions.RequestException as e:
         logger.error(f"Ошибка связи с Агентом-источником: {e}")
-        return f"⚠️ Ошибка: Не удалось связаться с Агентом по адресу {AGENT_SOURCE_URL}."
+        return f"⚠️ Ошибка: Не удалось связаться с Агентом по адресу {AGENT_SOURCE_URL}. Проверьте, запущен ли агент."
     except Exception as e:
         logger.exception("Критическая ошибка при запросе к Агенту")
         return f"⚠️ Неизвестная ошибка при запросе к Агенту: {e}"
 
+# get_openrouter_response остается без изменений
 
 def get_openrouter_response(prompt: str) -> str:
-    """Отправляет запрос к OpenRouter. (Остается без изменений)"""
+    """Отправляет запрос к OpenRouter."""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -76,17 +78,21 @@ def get_openrouter_response(prompt: str) -> str:
 
 # --- 4. ОБРАБОТЧИКИ СООБЩЕНИЙ ---
 
-@bot.message_handler(commands=['start', 'help'])
-def cmd_start(message: types.Message):
-    bot.reply_to(message, "Привет. Я бот-агент. Используй команду /portfolio для просмотра твоих инвестиций.")
+# ... (cmd_start и handle_message остаются) ...
 
 @bot.message_handler(commands=['portfolio'])
 def cmd_portfolio(message: types.Message):
     logger.info(f"Команда /portfolio от {message.chat.id}")
     bot.send_chat_action(message.chat.id, 'typing')
-    # Используем новую функцию для запроса к отдельному сервису
-    report = get_portfolio_from_agent()
+    # Вызываем новую функцию для запроса к отдельному сервису
+    report = get_portfolio_from_agent() 
     bot.reply_to(message, report)
+
+# ... (Маршруты Flask и Запуск остаются) ...
+
+@bot.message_handler(commands=['start', 'help'])
+def cmd_start(message: types.Message):
+    bot.reply_to(message, "Привет. Я бот-агент. Используй команду /portfolio для просмотра твоих инвестиций.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message: types.Message):
@@ -95,7 +101,7 @@ def handle_message(message: types.Message):
     reply = get_openrouter_response(message.text)
     bot.reply_to(message, reply)
 
-# --- 5. Маршруты Flask и Запуск (Остаются для работы вебхуков) ---
+# --- 5. Маршруты Flask ---
 
 @app.route("/")
 def index():
@@ -117,11 +123,11 @@ def set_webhook():
 
 @app.route(SECRET_ROUTE, methods=["POST"])
 def telegram_webhook():
+    """Главный маршрут для Telegram Webhook"""
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
     return "", 200
 
 # --- 6. Запуск приложения ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    # Бот запускается на основном порту (например, 10000)
     app.run(host="0.0.0.0", port=port)
