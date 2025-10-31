@@ -1,16 +1,12 @@
-# app.py (Обновленный основной файл)
+# main_bot.py (Основной Бот - легкий и независимый)
 
 import os
 import requests
 import json
 import logging
-# Pandas, tinkoff.invest, MoneyValue, PortfolioResponse теперь нужны только в agent_source.py
 from flask import Flask, request
 from telebot import types
 import telebot
-
-# --- ИМПОРТ НОВОГО АГЕНТА ---
-from agent_source import get_tinkoff_portfolio 
 
 # --- 1. Настройка логирования и переменных ---
 logging.basicConfig(level=logging.INFO)
@@ -18,13 +14,14 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-# TINKOFF_API_TOKEN теперь управляется внутри agent_source.py
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "gpt-3.5-turbo")
 
-# Проверяем только токены, необходимые для работы этого файла
+# URL нашего нового микросервиса. Предполагаем, что он доступен по сети или локально.
+AGENT_SOURCE_URL = os.getenv("AGENT_SOURCE_URL", "http://127.0.0.1:8000")
+
 if not TELEGRAM_TOKEN or not OPENROUTER_API_KEY:
-    logger.critical("❌ Не найдены все обязательные токены (Telegram, OpenRouter).")
-    raise ValueError("Не найдены обязательные переменные среды.")
+    logger.critical("❌ Не найдены все обязательные токены для Бота.")
+    raise ValueError("Не найдены обязательные переменные среды для основного бота.")
 
 # --- 2. Инициализация ---
 bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode='HTML')
@@ -33,8 +30,25 @@ SECRET_ROUTE = f"/{TELEGRAM_TOKEN}"
 
 # --- 3. ФУНКЦИИ ---
 
+def get_portfolio_from_agent() -> str:
+    """Запрашивает данные портфеля у микросервиса-источника."""
+    url = f"{AGENT_SOURCE_URL}/api/v1/portfolio"
+    try:
+        # Делаем HTTP-запрос к нашему независимому агенту
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        # Получаем готовый, отформатированный отчет из JSON
+        return response.json().get("report", "⚠️ Ошибка: Агент не вернул отчет.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка связи с Агентом-источником: {e}")
+        return f"⚠️ Ошибка: Не удалось связаться с Агентом по адресу {AGENT_SOURCE_URL}."
+    except Exception as e:
+        logger.exception("Критическая ошибка при запросе к Агенту")
+        return f"⚠️ Неизвестная ошибка при запросе к Агенту: {e}"
+
+
 def get_openrouter_response(prompt: str) -> str:
-    """Отправляет запрос к OpenRouter."""
+    """Отправляет запрос к OpenRouter. (Остается без изменений)"""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -70,8 +84,8 @@ def cmd_start(message: types.Message):
 def cmd_portfolio(message: types.Message):
     logger.info(f"Команда /portfolio от {message.chat.id}")
     bot.send_chat_action(message.chat.id, 'typing')
-    # Вызываем функцию из нашего нового агента!
-    report = get_tinkoff_portfolio() 
+    # Используем новую функцию для запроса к отдельному сервису
+    report = get_portfolio_from_agent()
     bot.reply_to(message, report)
 
 @bot.message_handler(func=lambda message: True)
@@ -81,7 +95,7 @@ def handle_message(message: types.Message):
     reply = get_openrouter_response(message.text)
     bot.reply_to(message, reply)
 
-# --- 5. Маршруты Flask ---
+# --- 5. Маршруты Flask и Запуск (Остаются для работы вебхуков) ---
 
 @app.route("/")
 def index():
@@ -103,11 +117,11 @@ def set_webhook():
 
 @app.route(SECRET_ROUTE, methods=["POST"])
 def telegram_webhook():
-    """Главный маршрут для Telegram Webhook"""
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
     return "", 200
 
 # --- 6. Запуск приложения ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
+    # Бот запускается на основном порту (например, 10000)
     app.run(host="0.0.0.0", port=port)
