@@ -1,2 +1,5 @@
-pandas
-tinkoff-invest
+Flask==3.1.2
+pandas==2.3.3
+tinkoff-invest==1.0.5
+# если понадобятся дополнительные утилиты, добавьте ниже
+# tabulate
