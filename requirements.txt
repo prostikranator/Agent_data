@@ -2,6 +2,6 @@
 Flask
 requests
 pyTelegramBotAPI
-tinkoff-invest
+tinvest
 pandas
 gunicorn
