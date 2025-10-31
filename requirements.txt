@@ -1,7 +1,6 @@
 Flask
 requests
 pyTelegramBotAPI
-# Устарело: tinvest
-tinkoff-invest-sdk  # <-- НОВАЯ БИБЛИОТЕКА
+tinkoff-invest  # <-- ИСПРАВЛЕННОЕ ИМЯ: tinkoff-invest
 pandas
 gunicorn
