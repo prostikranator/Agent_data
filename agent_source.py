@@ -3,7 +3,9 @@ import json
 from flask import Flask, jsonify, request
 import pandas as pd
 # Используем новую, рабочую библиотеку tinvest
-from tinvest import SyncClient, TinvestApiError 
+from tinvest import SyncClient
+# 2. Корректный импорт исключения
+from tinvest.exceptions import TinvestApiError 
 
 # Получение токена из переменных окружения
 # В Render это устанавливается в разделе Environment
