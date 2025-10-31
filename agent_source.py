@@ -1,14 +1,16 @@
+# agent_source.py
+
 import os
 import json
 from flask import Flask, jsonify, request
 import pandas as pd
-# Используем новую, рабочую библиотеку tinvest
+# 1. Корректный импорт клиента SyncClient
 from tinvest import SyncClient
-# 2. Корректный импорт исключения
-from tinvest.exceptions import TinvestApiError 
+# 2. Корректный импорт исключения для обработки ошибок API (TinvestError)
+from tinvest.exceptions import TinvestError 
 
 # Получение токена из переменных окружения
-# В Render это устанавливается в разделе Environment
+# В Render это переменная среды TINKOFF_API_TOKEN
 TINKOFF_API_TOKEN = os.getenv("TINKOFF_API_TOKEN")
 
 app = Flask(__name__)
@@ -22,40 +24,40 @@ def health_check():
 # --- Маршрут для получения портфеля ---
 @app.route('/portfolio', methods=['GET'])
 def portfolio_route():
-    """Обрабатывает HTTP-запрос и возвращает данные портфеля."""
+    """Обрабатывает HTTP-запрос и возвращает данные портфеля в формате JSON."""
     data, status_code = get_portfolio()
-    # Если данные возвращаются как строка (JSON), то возвращаем ее,
-    # иначе jsonify для словаря ошибки.
+    
+    # Если статус 200 (успех), возвращаем JSON-строку
     if status_code == 200:
         return data, status_code, {'Content-Type': 'application/json'}
+        
+    # Если ошибка, возвращаем JSON-словарь с кодом ошибки
     return jsonify(data), status_code
 
 def get_portfolio():
-    """Получает портфель и возвращает его в виде JSON-строки."""
+    """Получает портфель из Тинькофф Инвестиций и возвращает его в виде JSON-строки."""
+    # Проверка наличия токена
     if not TINKOFF_API_TOKEN:
-        # Если токен не установлен, возвращаем ошибку
         return {"error": "TINKOFF_API_TOKEN не установлен. Проверьте переменные окружения."}, 500
 
     try:
-        # 1. Инициализация клиента tinvest
+        # Инициализация синхронного клиента
         client = SyncClient(TINKOFF_API_TOKEN)
         
-        # 2. Получаем список счетов
-        # Нам нужен ID счета для запроса портфеля
+        # Получаем список счетов (нужен ID счета)
         accounts = client.get_accounts().payload.accounts
         if not accounts:
             return {"error": "Нет доступных счетов в Тинькофф для этого токена."}, 500
             
-        # Берем первый счет, предполагая, что он основной
+        # Используем ID первого счета
         account_id = accounts[0].broker_account_id
         
-        # 3. Получаем портфель
+        # Получаем портфель
         portfolio_response = client.get_portfolio(account_id=account_id).payload
         
         positions = []
         for position in portfolio_response.positions:
-            # Преобразование данных для удобства: 
-            # используем .value и .currency из объекта MoneyValue
+            # Обработка MoneyValue: извлекаем значение и валюту
             current_price = position.average_position_price.value 
             currency = position.average_position_price.currency
             
@@ -63,30 +65,30 @@ def get_portfolio():
                 "ticker": position.ticker,
                 "figi": position.figi,
                 "name": position.name,
-                "balance": float(position.balance), # Преобразуем для корректной работы с Pandas
+                "balance": float(position.balance), # Преобразование в float для удобства
                 "currency": currency,
                 "price": float(current_price),
             })
         
-        # 4. Преобразование в DataFrame и JSON
+        # Преобразование списка позиций в DataFrame и затем в JSON
         df = pd.DataFrame(positions)
         
-        # Возвращаем результат в формате JSON
         return df.to_json(orient="records"), 200
 
-    # Обработка специфических ошибок API
-    except TinvestApiError as e: 
-        error_msg = f"Ошибка API Тинькофф (Tinvest): {e.response.text}"
+    # Обработка ошибок, связанных с Тинькофф API (TinvestError)
+    except TinvestError as e: 
+        error_msg = f"Ошибка API Тинькофф (Tinvest): {e}"
         app.logger.error(error_msg)
         return {"error": error_msg}, 500
-    # Обработка любых других ошибок
+        
+    # Обработка любых других непредвиденных ошибок
     except Exception as e:
         error_msg = f"Неизвестная ошибка при получении портфеля: {e}"
         app.logger.error(error_msg)
         return {"error": error_msg}, 500
 
-# Этот блок важен для запуска локально, но Render использует Gunicorn
+# Блок для запуска через Gunicorn на Render
 if __name__ == '__main__':
-    # На Render порт задается через env переменную PORT
     port = int(os.environ.get("PORT", 5000))
+    # В реальной среде Render это запускается через Gunicorn, а не этот блок
     app.run(host='0.0.0.0', port=port)
