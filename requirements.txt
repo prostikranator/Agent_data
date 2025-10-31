@@ -4,4 +4,4 @@ requests
 pyTelegramBotAPI
 tinkoff-invest
 pandas
-gunicorn  <-- НОВАЯ СТРОКА
+gunicorn
